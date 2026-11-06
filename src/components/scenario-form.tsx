@@ -27,15 +27,15 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
   const [expected, setExpected] = useState(initial?.expected_response ?? "");
   const [evalType, setEvalType] = useState<EvalType>((initial?.eval_type as EvalType) ?? "keyword");
   // type-specific fields
-  const [required, setRequired] = useState(((cfg0.required as string[]) ?? []).join(", "));
-  const [forbidden, setForbidden] = useState(((cfg0.forbidden as string[]) ?? []).join(", "));
-  const [caseSensitive, setCaseSensitive] = useState(Boolean(cfg0.case_sensitive));
-  const [exactText, setExactText] = useState((cfg0.expected as string) ?? "");
-  const [normalizeWs, setNormalizeWs] = useState(cfg0.normalize_whitespace !== false);
-  const [schemaText, setSchemaText] = useState(cfg0.schema ? JSON.stringify(cfg0.schema, null, 2) : '{\n  "type": "object"\n}');
-  const [rubric, setRubric] = useState((cfg0.rubric as string) ?? "");
-  const [threshold, setThreshold] = useState(String(cfg0.pass_threshold ?? "0.7"));
-  const [judgeModel, setJudgeModel] = useState((cfg0.judge_model as string) ?? "");
+  const [required, setRequired] = useState(((cfg0["required"] as string[]) ?? []).join(", "));
+  const [forbidden, setForbidden] = useState(((cfg0["forbidden"] as string[]) ?? []).join(", "));
+  const [caseSensitive, setCaseSensitive] = useState(Boolean(cfg0["case_sensitive"]));
+  const [exactText, setExactText] = useState((cfg0["expected"] as string) ?? "");
+  const [normalizeWs, setNormalizeWs] = useState(cfg0["normalize_whitespace"] !== false);
+  const [schemaText, setSchemaText] = useState(cfg0["schema"] ? JSON.stringify(cfg0["schema"], null, 2) : '{\n  "type": "object"\n}');
+  const [rubric, setRubric] = useState((cfg0["rubric"] as string) ?? "");
+  const [threshold, setThreshold] = useState(String(cfg0["pass_threshold"] ?? "0.7"));
+  const [judgeModel, setJudgeModel] = useState((cfg0["judge_model"] as string) ?? "");
   const [errors, setErrors] = useState<string[]>([]);
 
   const create = useServerFn(createScenario);
@@ -54,7 +54,7 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
       case "keyword": {
         const c: Cfg = { required: splitList(required), case_sensitive: caseSensitive };
         const f = splitList(forbidden);
-        if (f.length) c.forbidden = f;
+        if (f.length) c["forbidden"] = f;
         return c;
       }
       case "exact":
@@ -67,7 +67,7 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
         }
       case "llm_judge": {
         const c: Cfg = { rubric, pass_threshold: Number(threshold) };
-        if (judgeModel.trim()) c.judge_model = judgeModel.trim();
+        if (judgeModel.trim()) c["judge_model"] = judgeModel.trim();
         return c;
       }
     }

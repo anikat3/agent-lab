@@ -51,7 +51,7 @@ async function engineRequest(
         ...(key ? { authorization: `Bearer ${key}` } : {}),
         ...init.headers,
       },
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      body: init.body === undefined ? null : JSON.stringify(init.body),
       signal: ctrl.signal,
     });
   } catch (e) {
