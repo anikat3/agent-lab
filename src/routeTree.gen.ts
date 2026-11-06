@@ -12,6 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as RunsIndexRouteImport } from './routes/runs.index'
+import { Route as RunsIdRouteImport } from './routes/runs.$id'
+import { Route as RunsNewRouteImport } from './routes/runs.new'
 import { Route as SuitesIndexRouteImport } from './routes/suites.index'
 import { Route as SuitesIdRouteImport } from './routes/suites.$id'
 
@@ -30,6 +33,21 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RunsIndexRoute = RunsIndexRouteImport.update({
+  id: '/runs/',
+  path: '/runs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RunsIdRoute = RunsIdRouteImport.update({
+  id: '/runs/$id',
+  path: '/runs/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RunsNewRoute = RunsNewRouteImport.update({
+  id: '/runs/new',
+  path: '/runs/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuitesIndexRoute = SuitesIndexRouteImport.update({
   id: '/suites/',
   path: '/suites/',
@@ -45,14 +63,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/auth': typeof AuthRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs/new': typeof RunsNewRoute
   '/suites/$id': typeof SuitesIdRoute
+  '/runs/': typeof RunsIndexRoute
   '/suites/': typeof SuitesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/auth': typeof AuthRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs/new': typeof RunsNewRoute
   '/suites/$id': typeof SuitesIdRoute
+  '/runs': typeof RunsIndexRoute
   '/suites': typeof SuitesIndexRoute
 }
 export interface FileRoutesById {
@@ -60,22 +84,53 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/auth': typeof AuthRoute
+  '/runs/$id': typeof RunsIdRoute
+  '/runs/new': typeof RunsNewRoute
   '/suites/$id': typeof SuitesIdRoute
+  '/runs/': typeof RunsIndexRoute
   '/suites/': typeof SuitesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/agents' | '/auth' | '/suites/$id' | '/suites/'
+  fullPaths:
+    | '/'
+    | '/agents'
+    | '/auth'
+    | '/runs/$id'
+    | '/runs/new'
+    | '/suites/$id'
+    | '/runs/'
+    | '/suites/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/agents' | '/auth' | '/suites/$id' | '/suites'
-  id: '__root__' | '/' | '/agents' | '/auth' | '/suites/$id' | '/suites/'
+  to:
+    | '/'
+    | '/agents'
+    | '/auth'
+    | '/runs/$id'
+    | '/runs/new'
+    | '/suites/$id'
+    | '/runs'
+    | '/suites'
+  id:
+    | '__root__'
+    | '/'
+    | '/agents'
+    | '/auth'
+    | '/runs/$id'
+    | '/runs/new'
+    | '/suites/$id'
+    | '/runs/'
+    | '/suites/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
   AuthRoute: typeof AuthRoute
+  RunsIdRoute: typeof RunsIdRoute
+  RunsNewRoute: typeof RunsNewRoute
   SuitesIdRoute: typeof SuitesIdRoute
+  RunsIndexRoute: typeof RunsIndexRoute
   SuitesIndexRoute: typeof SuitesIndexRoute
 }
 
@@ -102,6 +157,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/runs/': {
+      id: '/runs/'
+      path: '/runs'
+      fullPath: '/runs/'
+      preLoaderRoute: typeof RunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs/$id': {
+      id: '/runs/$id'
+      path: '/runs/$id'
+      fullPath: '/runs/$id'
+      preLoaderRoute: typeof RunsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs/new': {
+      id: '/runs/new'
+      path: '/runs/new'
+      fullPath: '/runs/new'
+      preLoaderRoute: typeof RunsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/suites/': {
       id: '/suites/'
       path: '/suites'
@@ -123,7 +199,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
   AuthRoute: AuthRoute,
+  RunsIdRoute: RunsIdRoute,
+  RunsNewRoute: RunsNewRoute,
   SuitesIdRoute: SuitesIdRoute,
+  RunsIndexRoute: RunsIndexRoute,
   SuitesIndexRoute: SuitesIndexRoute,
 }
 export const routeTree = rootRouteImport

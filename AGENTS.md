@@ -28,3 +28,11 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- The evaluation engine is an external Python service; the app only proxies to it via server functions in `src/lib/api/` (`engine.server.ts`). Never simulate execution in-app — results must come from the engine.
+- `docs/api-contract.md` and `src/lib/api/types.ts` describe the same REST contract; change both together.
+- Eval-config validation lives in `src/lib/api/eval-config.ts` and is reused by client forms and server functions so both sides reject the same input.
+- Demo rows are flagged `is_demo`; anon access is restricted to them by RLS and by explicit filters in read server functions (`optionalAuth`). Real metrics exclude demo rows.
+- Pure run rules (transitions, retry/backoff, rate limit, demo scoping) live in `engine-logic.ts` and are unit-tested in `src/test/engine-logic.test.ts`.
+- Retrying a run inserts a new linked run (`retry_of_run_id`); results are upserted on `(run_id, scenario_id)`.
