@@ -18,7 +18,7 @@ type Cfg = Record<string, unknown>;
 const splitList = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const DEFAULT_MESSAGES = JSON.stringify([{ role: "user", content: "" }], null, 2);
 
-export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; initial?: Scenario; onDone: () => void }) {
+export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; initial?: Scenario | undefined; onDone: () => void }) {
   const cfg0 = (initial?.eval_config ?? {}) as Cfg;
   const [name, setName] = useState(initial?.name ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
