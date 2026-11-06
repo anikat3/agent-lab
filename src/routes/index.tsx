@@ -89,7 +89,7 @@ function Dashboard() {
                     <XAxis dataKey="date" tickFormatter={(v) => new Date(v).toLocaleDateString()} stroke="var(--muted-foreground)" fontSize={11} />
                     <YAxis domain={[0, 100]} unit="%" stroke="var(--muted-foreground)" fontSize={11} />
                     <Tooltip contentStyle={tooltipStyle} labelFormatter={(v) => fmtDate(String(v))} />
-                    <Line type="monotone" dataKey="passRate" name="Pass rate %" stroke="var(--chart-1)" strokeWidth={2} dot />
+                    <Line type="monotone" dataKey="passRate" name="Pass rate %" stroke="var(--chart-1)" strokeWidth={2} dot isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -106,7 +106,7 @@ function Dashboard() {
                       <XAxis type="number" allowDecimals={false} stroke="var(--muted-foreground)" fontSize={11} />
                       <YAxis type="category" dataKey="category" stroke="var(--muted-foreground)" fontSize={11} width={110} />
                       <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
-                      <Bar dataKey="count" fill="var(--chart-3)" radius={[0, 3, 3, 0]} />
+                      <Bar dataKey="count" fill="var(--chart-3)" radius={[0, 3, 3, 0]} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
