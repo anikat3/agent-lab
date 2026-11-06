@@ -10,33 +10,73 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as SuitesIndexRouteImport } from './routes/suites.index'
+import { Route as SuitesIdRouteImport } from './routes/suites.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuitesIndexRoute = SuitesIndexRouteImport.update({
+  id: '/suites/',
+  path: '/suites/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SuitesIdRoute = SuitesIdRouteImport.update({
+  id: '/suites/$id',
+  path: '/suites/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/auth': typeof AuthRoute
+  '/suites/$id': typeof SuitesIdRoute
+  '/suites/': typeof SuitesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/auth': typeof AuthRoute
+  '/suites/$id': typeof SuitesIdRoute
+  '/suites': typeof SuitesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
+  '/auth': typeof AuthRoute
+  '/suites/$id': typeof SuitesIdRoute
+  '/suites/': typeof SuitesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/agents' | '/auth' | '/suites/$id' | '/suites/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/agents' | '/auth' | '/suites/$id' | '/suites'
+  id: '__root__' | '/' | '/agents' | '/auth' | '/suites/$id' | '/suites/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentsRoute: typeof AgentsRoute
+  AuthRoute: typeof AuthRoute
+  SuitesIdRoute: typeof SuitesIdRoute
+  SuitesIndexRoute: typeof SuitesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +88,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/suites/': {
+      id: '/suites/'
+      path: '/suites'
+      fullPath: '/suites/'
+      preLoaderRoute: typeof SuitesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/suites/$id': {
+      id: '/suites/$id'
+      path: '/suites/$id'
+      fullPath: '/suites/$id'
+      preLoaderRoute: typeof SuitesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentsRoute: AgentsRoute,
+  AuthRoute: AuthRoute,
+  SuitesIdRoute: SuitesIdRoute,
+  SuitesIndexRoute: SuitesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
