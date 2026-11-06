@@ -77,7 +77,7 @@ export function StatusPill({ status }: { status: string }) {
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono text-[11px] uppercase",
-        STATUS_STYLES[status] ?? STATUS_STYLES.pending,
+        STATUS_STYLES[status] ?? STATUS_STYLES["pending"],
       )}
     >
       {(status === "running" || status === "queued") && (
@@ -100,7 +100,7 @@ export function SignInPrompt({ text = "Sign in to see and edit your workspace." 
   );
 }
 
-export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+export function PageHeader({ title, description, actions }: { title: string; description?: string | undefined; actions?: ReactNode }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
       <div>

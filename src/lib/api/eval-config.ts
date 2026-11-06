@@ -39,21 +39,21 @@ export function jsonSchemaProblem(schema: unknown): string | null {
   const s = schema as Record<string, unknown>;
   if (Object.keys(s).length === 0) return "Schema must not be empty";
   if ("type" in s) {
-    const t = s.type;
+    const t = s["type"];
     const types = Array.isArray(t) ? t : [t];
     if (!types.every((x) => typeof x === "string" && JSON_TYPES.includes(x))) {
       return `"type" must be one of: ${JSON_TYPES.join(", ")}`;
     }
   }
   if ("properties" in s) {
-    const p = s.properties;
+    const p = s["properties"];
     if (!p || typeof p !== "object" || Array.isArray(p)) return '"properties" must be an object';
     for (const [k, v] of Object.entries(p)) {
       if (!v || typeof v !== "object" || Array.isArray(v)) return `Property "${k}" must be a schema object`;
     }
   }
   if ("required" in s) {
-    if (!Array.isArray(s.required) || !s.required.every((x) => typeof x === "string")) {
+    if (!Array.isArray(s["required"]) || !(s["required"] as unknown[]).every((x) => typeof x === "string")) {
       return '"required" must be an array of strings';
     }
   }
@@ -111,9 +111,9 @@ export const scenarioInputSchema = z
   .object({
     suite_id: z.string().uuid(),
     name: nonEmpty.max(200),
-    category: z.string().trim().max(100).nullable().optional(),
+    category: z.string().trim().max(100).nullable().default(null),
     input_messages: z.array(messageSchema).min(1, "Add at least one message"),
-    expected_response: z.string().nullable().optional(),
+    expected_response: z.string().nullable().default(null),
     eval_type: z.enum(EVAL_TYPES),
     eval_config: z.unknown(),
     tags: z.array(z.string().trim().min(1)).max(20).default([]),
@@ -127,7 +127,7 @@ export type ScenarioInput = z.infer<typeof scenarioInputSchema>;
 
 export const suiteInputSchema = z.object({
   name: nonEmpty.max(200),
-  description: z.string().max(2000).nullable().optional(),
+  description: z.string().max(2000).nullable().default(null),
 });
 
 export const agentInputSchema = z.object({

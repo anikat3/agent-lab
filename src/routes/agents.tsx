@@ -83,7 +83,7 @@ function AgentsPage() {
   );
 }
 
-function AgentForm({ initial, onDone }: { initial?: Agent; onDone: () => void }) {
+function AgentForm({ initial, onDone }: { initial?: Agent | undefined; onDone: () => void }) {
   const create = useServerFn(createAgent);
   const update = useServerFn(updateAgent);
   const [name, setName] = useState(initial?.name ?? "");
