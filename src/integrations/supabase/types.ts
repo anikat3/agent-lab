@@ -14,7 +14,276 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agent_configs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_demo: boolean
+          model: string
+          name: string
+          system_prompt: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_demo?: boolean
+          model: string
+          name: string
+          system_prompt?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_demo?: boolean
+          model?: string
+          name?: string
+          system_prompt?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      eval_results: {
+        Row: {
+          actual_response: string | null
+          created_at: string
+          evaluator_details: Json | null
+          failure_category: string | null
+          failure_explanation: string | null
+          id: string
+          is_demo: boolean
+          latency_ms: number | null
+          passed: boolean
+          quality_score: number | null
+          run_id: string
+          scenario_id: string
+        }
+        Insert: {
+          actual_response?: string | null
+          created_at?: string
+          evaluator_details?: Json | null
+          failure_category?: string | null
+          failure_explanation?: string | null
+          id?: string
+          is_demo?: boolean
+          latency_ms?: number | null
+          passed: boolean
+          quality_score?: number | null
+          run_id: string
+          scenario_id: string
+        }
+        Update: {
+          actual_response?: string | null
+          created_at?: string
+          evaluator_details?: Json | null
+          failure_category?: string | null
+          failure_explanation?: string | null
+          id?: string
+          is_demo?: boolean
+          latency_ms?: number | null
+          passed?: boolean
+          quality_score?: number | null
+          run_id?: string
+          scenario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eval_results_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "eval_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eval_results_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "test_scenarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      eval_runs: {
+        Row: {
+          agent_config_id: string | null
+          agent_snapshot: Json
+          attempt_count: number
+          avg_latency_ms: number | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error_code: string | null
+          error_message: string | null
+          external_run_id: string | null
+          id: string
+          is_demo: boolean
+          max_retries: number
+          pass_rate: number | null
+          passed: number
+          retry_of_run_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["run_status"]
+          suite_id: string
+          timeout_seconds: number
+          total: number
+        }
+        Insert: {
+          agent_config_id?: string | null
+          agent_snapshot?: Json
+          attempt_count?: number
+          avg_latency_ms?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          external_run_id?: string | null
+          id?: string
+          is_demo?: boolean
+          max_retries?: number
+          pass_rate?: number | null
+          passed?: number
+          retry_of_run_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["run_status"]
+          suite_id: string
+          timeout_seconds?: number
+          total?: number
+        }
+        Update: {
+          agent_config_id?: string | null
+          agent_snapshot?: Json
+          attempt_count?: number
+          avg_latency_ms?: number | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          external_run_id?: string | null
+          id?: string
+          is_demo?: boolean
+          max_retries?: number
+          pass_rate?: number | null
+          passed?: number
+          retry_of_run_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["run_status"]
+          suite_id?: string
+          timeout_seconds?: number
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eval_runs_agent_config_id_fkey"
+            columns: ["agent_config_id"]
+            isOneToOne: false
+            referencedRelation: "agent_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eval_runs_retry_of_run_id_fkey"
+            columns: ["retry_of_run_id"]
+            isOneToOne: false
+            referencedRelation: "eval_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eval_runs_suite_id_fkey"
+            columns: ["suite_id"]
+            isOneToOne: false
+            referencedRelation: "test_suites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      test_scenarios: {
+        Row: {
+          category: string | null
+          created_at: string
+          eval_config: Json
+          eval_type: Database["public"]["Enums"]["eval_type"]
+          expected_response: string | null
+          id: string
+          input_messages: Json
+          is_demo: boolean
+          name: string
+          suite_id: string
+          tags: string[]
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          eval_config?: Json
+          eval_type: Database["public"]["Enums"]["eval_type"]
+          expected_response?: string | null
+          id?: string
+          input_messages?: Json
+          is_demo?: boolean
+          name: string
+          suite_id: string
+          tags?: string[]
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          eval_config?: Json
+          eval_type?: Database["public"]["Enums"]["eval_type"]
+          expected_response?: string | null
+          id?: string
+          input_messages?: Json
+          is_demo?: boolean
+          name?: string
+          suite_id?: string
+          tags?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_scenarios_suite_id_fkey"
+            columns: ["suite_id"]
+            isOneToOne: false
+            referencedRelation: "test_suites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      test_suites: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_demo: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_demo?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_demo?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +292,14 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      eval_type: "keyword" | "exact" | "json_schema" | "llm_judge"
+      run_status:
+        | "pending"
+        | "queued"
+        | "running"
+        | "completed"
+        | "failed"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +426,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      eval_type: ["keyword", "exact", "json_schema", "llm_judge"],
+      run_status: [
+        "pending",
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
+    },
   },
 } as const
