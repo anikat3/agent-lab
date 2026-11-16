@@ -6,7 +6,7 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import inspect, text
 
 from app.db import Base, make_engine
 from app.main import create_app
@@ -14,13 +14,13 @@ from app.migrations import MIGRATIONS, run_migrations
 from app.repository import create_or_get_run
 from app.schemas import LaunchRequest
 
-from .conftest import assert_error, launch, make_settings, queue_run, run_status
+from .conftest import assert_error, launch, make_api_app, make_settings, queue_run, run_status
 
 # --- connection configuration --------------------------------------------------------
 
 
-def test_sqlite_pragmas_are_applied(tmp_path):
-    engine = make_engine(f"sqlite:///{tmp_path / 'p.db'}", sqlite_busy_timeout_ms=1234)
+def test_sqlite_pragmas_are_applied(tmp_path, new_engine):
+    engine = new_engine(f"sqlite:///{tmp_path / 'p.db'}", sqlite_busy_timeout_ms=1234)
     with engine.connect() as conn:
         assert conn.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
         assert conn.exec_driver_sql("PRAGMA busy_timeout").scalar() == 1234
@@ -39,16 +39,40 @@ def test_app_uses_configured_busy_timeout(tmp_path):
 # --- concurrency ----------------------------------------------------------------------
 
 
-def _raw(tmp_path) -> sqlite3.Connection:
-    """A second, independent connection, standing in for another process."""
-    conn = sqlite3.connect(tmp_path / "test.db", isolation_level=None, check_same_thread=False)
-    conn.execute("PRAGMA busy_timeout=0")
-    return conn
+@pytest.fixture
+def raw_conn(tmp_path):  # type: ignore[no-untyped-def]
+    """Opens independent sqlite3 connections (standing in for another process); closes them after."""
+    opened: list[sqlite3.Connection] = []
+
+    def open_() -> sqlite3.Connection:
+        conn = sqlite3.connect(tmp_path / "test.db", isolation_level=None, check_same_thread=False)
+        conn.execute("PRAGMA busy_timeout=0")
+        opened.append(conn)
+        return conn
+
+    yield open_
+    for conn in opened:
+        conn.close()
 
 
-def test_reads_are_not_blocked_by_an_open_write_transaction(client, tmp_path):
+@pytest.fixture
+def new_engine():  # type: ignore[no-untyped-def]
+    """make_engine() whose engines are disposed after the test."""
+    engines = []
+
+    def make(url: str, **kwargs):  # type: ignore[no-untyped-def]
+        engine = make_engine(url, **kwargs)
+        engines.append(engine)
+        return engine
+
+    yield make
+    for engine in engines:
+        engine.dispose()
+
+
+def test_reads_are_not_blocked_by_an_open_write_transaction(client, tmp_path, raw_conn):
     ext_id = queue_run(client)
-    other = _raw(tmp_path)
+    other = raw_conn()
     other.execute("BEGIN IMMEDIATE")  # hold the write lock, as the worker does mid-write
     other.execute("UPDATE runs SET status='running' WHERE external_run_id=?", (ext_id,))
     try:
@@ -59,8 +83,8 @@ def test_reads_are_not_blocked_by_an_open_write_transaction(client, tmp_path):
     assert run_status(client, ext_id)["status"] == "running"
 
 
-def test_writer_waits_for_the_lock_instead_of_failing(client, tmp_path, payload):
-    other = _raw(tmp_path)
+def test_writer_waits_for_the_lock_instead_of_failing(client, tmp_path, payload, raw_conn):
+    other = raw_conn()
     other.execute("BEGIN IMMEDIATE")
     released = threading.Event()
 
@@ -77,10 +101,10 @@ def test_writer_waits_for_the_lock_instead_of_failing(client, tmp_path, payload)
     assert time.monotonic() - started >= 0.25
 
 
-def test_lock_held_past_busy_timeout_returns_503(tmp_path, payload):
-    app = create_app(make_settings(tmp_path, sqlite_busy_timeout_ms=50))
+def test_lock_held_past_busy_timeout_returns_503(tmp_path, payload, raw_conn):
+    app = make_api_app(tmp_path, sqlite_busy_timeout_ms=50)
     with TestClient(app) as client:
-        other = _raw(tmp_path)
+        other = raw_conn()
         other.execute("BEGIN IMMEDIATE")
         try:
             err = assert_error(launch(client, payload), 503, "UNAVAILABLE")
@@ -120,15 +144,15 @@ def _versions(engine) -> list[int]:
         return list(conn.scalars(text("SELECT version FROM schema_migrations ORDER BY version")))
 
 
-def test_fresh_database_gets_all_migrations(tmp_path):
-    engine = make_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
+def test_fresh_database_gets_all_migrations(tmp_path, new_engine):
+    engine = new_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
     assert run_migrations(engine) == [1, 2]
     assert _versions(engine) == [1, 2]
     assert run_migrations(engine) == []  # idempotent
 
 
-def test_migrated_schema_matches_the_orm_models(tmp_path):
-    engine = make_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
+def test_migrated_schema_matches_the_orm_models(tmp_path, new_engine):
+    engine = new_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
     run_migrations(engine)
     insp = inspect(engine)
     for table in Base.metadata.sorted_tables:
@@ -139,9 +163,9 @@ def test_migrated_schema_matches_the_orm_models(tmp_path):
         assert {i.name for i in table.indexes} <= db_indexes, table.name
 
 
-def test_milestone_1_database_is_upgraded_without_losing_data(tmp_path):
+def test_milestone_1_database_is_upgraded_without_losing_data(tmp_path, new_engine):
     url = f"sqlite:///{tmp_path / 'm1.db'}"
-    engine = make_engine(url)
+    engine = new_engine(url)
     run_migrations(engine, MIGRATIONS[:1])  # a database exactly as Milestone 1 left it
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE schema_migrations"))  # M1 had no migrations table
@@ -158,8 +182,8 @@ def test_milestone_1_database_is_upgraded_without_losing_data(tmp_path):
     assert tuple(row) == ("rid", "queued", None, None)
 
 
-def test_failed_migration_rolls_back_completely(tmp_path):
-    engine = make_engine(f"sqlite:///{tmp_path / 'f.db'}")
+def test_failed_migration_rolls_back_completely(tmp_path, new_engine):
+    engine = new_engine(f"sqlite:///{tmp_path / 'f.db'}")
 
     def half_then_fail(conn) -> None:  # type: ignore[no-untyped-def]
         conn.execute(text("ALTER TABLE runs ADD COLUMN half_done INTEGER"))
@@ -199,9 +223,9 @@ def test_concurrent_startups_apply_migrations_once(tmp_path):
     assert sorted(applied) == [[], [], [], [1, 2]]
 
 
-def test_app_startup_runs_migrations(tmp_path):
+def test_app_startup_runs_migrations(tmp_path, new_engine):
     app = create_app(make_settings(tmp_path))
     with TestClient(app):
         pass
-    assert _versions(create_engine(f"sqlite:///{tmp_path / 'test.db'}")) == [1, 2]
+    assert _versions(new_engine(f"sqlite:///{tmp_path / 'test.db'}")) == [1, 2]
 

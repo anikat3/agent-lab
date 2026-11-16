@@ -15,6 +15,7 @@ from app.schemas import (
     ExactConfig,
     JsonSchemaConfig,
     KeywordConfig,
+    LaunchRequest,
     LlmJudgeConfig,
     ScenarioSpec,
 )
@@ -54,6 +55,39 @@ def _json_schema_problems(schema: dict[str, Any]) -> list[str]:
     except SchemaError as e:
         return [f"schema: {e.message}"]
     return []
+
+
+def validate_executor_support(req: LaunchRequest, executor: object) -> None:
+    """Reject work the configured executor cannot do, before anything is stored.
+
+    Uses the executor's optional capabilities (see app/execution.py); an executor that
+    declares none accepts everything.
+    """
+    supported_types = getattr(executor, "supported_eval_types", None)
+    if supported_types is not None:
+        invalid = [
+            {
+                "scenario_id": s.id,
+                "name": s.name,
+                "problems": [
+                    f"eval_type {s.eval_type!r} is not supported by this engine yet; "
+                    f"supported: {', '.join(sorted(supported_types))}"
+                ],
+            }
+            for s in req.scenarios
+            if s.eval_type not in supported_types
+        ]
+        if invalid:
+            raise ApiError(422, "INVALID_EVAL_CONFIG", f'Scenario "{invalid[0]["name"]}": {invalid[0]["problems"][0]}', {"scenarios": invalid})
+
+    supports_model = getattr(executor, "supports_model", None)
+    if supports_model is not None and not supports_model(req.agent.model):
+        raise ApiError(
+            400,
+            "INVALID_REQUEST",
+            f"Model {req.agent.model!r} is not supported by this engine (supported: OpenAI models, e.g. gpt-4o-mini)",
+            {"model": req.agent.model},
+        )
 
 
 def validate_scenario_configs(scenarios: list[ScenarioSpec]) -> None:

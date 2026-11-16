@@ -17,6 +17,12 @@ Executor rules:
 - Raise `ExecutionError` to fail the whole run with a specific code (e.g. the provider
   rejected the API key). Any other exception fails the run with `EXECUTION_ERROR`.
   Results stored before the failure are kept.
+
+Optional capabilities, checked by POST /runs so work the executor can't do is rejected
+before it is stored (an executor without them accepts everything):
+
+- `supported_eval_types: frozenset[str]`: unsupported types -> 422 INVALID_EVAL_CONFIG.
+- `supports_model(model: str) -> bool`: unsupported model -> 400 INVALID_REQUEST.
 """
 
 from dataclasses import dataclass

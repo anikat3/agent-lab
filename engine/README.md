@@ -3,11 +3,11 @@
 The Python service the AgentLab app calls to run evaluation suites. It implements the REST
 contract in [`../docs/api-contract.md`](../docs/api-contract.md).
 
-**Status: Milestone 2A (execution infrastructure).** Runs are validated, stored, and
-picked up by a background worker that claims them atomically, enforces timeouts and
-recovers from crashes. **No executor is registered yet**, so in the running app the
-worker does not start and every run stays `queued`. Milestone 2B registers a
-LangGraph/LangChain executor.
+**Status: Milestone 2B.** Runs are executed for real. A background worker claims each
+run, sends every scenario through a LangGraph workflow that calls the agent's OpenAI
+model via LangChain, evaluates the reply with deterministic keyword rules, and stores
+the result. Only `keyword` evaluation is supported so far. `exact`, `json_schema` and
+`llm_judge` scenarios are rejected at launch.
 
 ## Run locally
 
@@ -19,11 +19,37 @@ python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 
-cp .env.example .env        # then set EVAL_ENGINE_API_KEY to a long random string
+cp .env.example .env        # set EVAL_ENGINE_API_KEY, EVAL_EXECUTOR=langgraph, OPENAI_API_KEY
 uvicorn app.main:create_app --factory --reload --port 8000
 ```
 
-Interactive API docs: http://localhost:8000/docs. Run the tests with `pytest`.
+Interactive API docs: http://localhost:8000/docs. `GET /health` reports whether execution
+is available (`execution.available`, and `execution.reason` if not).
+
+## Testing (offline, no API charges)
+
+`pytest` runs the whole suite offline. Models are either mocked or served by a local
+OpenAI-compatible server (`tests/fake_openai_server.py`), which exercises the real
+ChatOpenAI → OpenAI SDK → HTTP path on 127.0.0.1. Three guards make sure no test can
+spend money by accident:
+
+1. **Credentials are scrubbed.** `OPENAI_*`, `LANGSMITH_*` and every engine setting are
+   removed from the environment for each test, so a key exported in your shell is never
+   used.
+2. **`engine/.env` is ignored by test settings.**
+3. **Outbound network is blocked.** Any connection to a non-loopback address raises
+   `NetworkAccessBlocked`.
+
+Live tests (`tests/test_live_openai.py`) are deselected by default. They only run with
+**both** `-m live` and `RUN_LIVE_TESTS=1`, and they're the only tests the guards skip.
+
+**Manual end-to-end runs without charges:**
+
+```sh
+python -m tests.fake_openai_server 8799        # terminal 1: replies are prefixed [fake-openai]
+OPENAI_BASE_URL=http://127.0.0.1:8799/v1 OPENAI_API_KEY=sk-local-test-key-not-a-real-key \
+  EVAL_EXECUTOR=langgraph uvicorn app.main:create_app --factory --port 8000   # terminal 2
+```
 
 ## Configuration
 
@@ -35,8 +61,54 @@ Interactive API docs: http://localhost:8000/docs. Run the tests with `pytest`.
 | `WORKER_POLL_INTERVAL_SECONDS` | `1.0` | How often an idle worker looks for queued runs. |
 | `WORKER_LEASE_SECONDS` | `30` | A running run whose owner hasn't renewed its lease for this long is treated as orphaned. |
 | `WORKER_SHUTDOWN_GRACE_SECONDS` | `10` | On shutdown, how long the in-flight run may continue before it is interrupted. |
+| `EVAL_EXECUTOR` | `none` | `langgraph` enables execution. With `none` (or a missing key), no worker starts and `POST /runs` returns 503. |
+| `OPENAI_API_KEY` | — | OpenAI key for the agents' models. Server-side only; never logged or returned. |
+| `OPENAI_BASE_URL` | real OpenAI API | Point at an OpenAI-compatible endpoint instead (the local fake server, a proxy). |
+| `MODEL_TIMEOUT_SECONDS` | `60` | Budget for one model call, retries included (`MODEL_TIMEOUT` if exceeded). |
+| `MODEL_MAX_RETRIES` | `2` | Client retries for rate limits, 5xx and connection errors. |
 
 Variables are read from the environment, then from `engine/.env` (git-ignored).
+
+## The evaluation workflow (LangGraph)
+
+```text
+START -> call_agent -> evaluate -> END          (one graph invocation per scenario)
+
+call_agent  [system_prompt] + scenario messages (order and roles kept) -> ChatOpenAI.ainvoke
+            -> state.response, state.latency_ms
+evaluate    EVALUATORS[eval_type](response, eval_config) -> state.evaluation
+```
+
+- **Keyword rules** (`app/evaluators.py`, pure function):
+  - Every `required` keyword must appear, and no `forbidden` keyword may.
+  - Matching is substring containment, case-insensitive unless `case_sensitive: true`.
+  - The score is 1.0 for a pass and 0.0 for a fail.
+  - Failures are categorised `keyword_missing` or `forbidden_content`; forbidden wins
+    when both apply, and both are explained.
+- **Agent mistakes vs infrastructure failures.** A wrong answer is a stored result
+  (`passed: false`) and the run continues. A model or provider failure fails the run
+  with a structured code, keeping earlier results; nothing is ever recorded as a fake
+  evaluation. The codes:
+
+| `error.code` | Cause |
+|---|---|
+| `MODEL_AUTH_FAILED` | Key rejected (401) or not allowed to use the model (403) |
+| `MODEL_NOT_FOUND` | Unknown model, or the key can't access it (404) |
+| `MODEL_RATE_LIMITED` | Rate limit or exhausted quota, after retries |
+| `MODEL_TIMEOUT` | One model call exceeded `MODEL_TIMEOUT_SECONDS` |
+| `MODEL_BAD_REQUEST` | Request rejected, e.g. conversation too long |
+| `MODEL_PROVIDER_ERROR` | Provider unreachable or 5xx, after retries |
+
+Error messages are written by the engine, not copied from the provider, so neither keys
+nor prompt content leak into responses.
+
+- **Launch-time checks** (nothing is stored, no LLM call is spent):
+  - an unsupported eval type → `422 INVALID_EVAL_CONFIG`;
+  - a non-OpenAI model → `400 INVALID_REQUEST`. Models are accepted as bare OpenAI names
+    (`gpt-4o-mini`, `o3-mini`, …) or as `openai:<model>`.
+- **Adding a provider** takes a resolve rule and a branch in `ChatModels._create`
+  (`app/llm.py`). Error mapping uses langchain-core's provider-neutral exceptions, so
+  it needs no change.
 
 ## How execution works
 
@@ -152,7 +224,10 @@ app/
   migrations.py   versioned schema migrations
   lifecycle.py    statuses, allowed transitions, error codes, deadlines
   execution.py    executor interface: RunSpec, ScenarioOutcome, ExecutionError
+  graph.py        LangGraph workflow + LangGraphExecutor + build_executor(settings)
+  llm.py          model resolution, message construction, ChatOpenAI registry, error mapping
+  evaluators.py   deterministic evaluators (keyword)
   run_store.py    worker-side database operations (claim, lease, results, finish, recover)
   worker.py       background worker
-tests/            pytest suite (test-only executors; no LLM calls)
+tests/            pytest suite (mocked models; test_live_openai.py is opt-in)
 ```

@@ -109,9 +109,17 @@ class LlmJudgeConfig(_StrictConfig):
 # --- responses ------------------------------------------------------------------------
 
 
+class ExecutionInfo(BaseModel):
+    available: bool
+    executor: str | None
+    reason: str | None
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     version: str
+    # Engine addition (backward compatible: the app's schema ignores unknown fields).
+    execution: ExecutionInfo
 
 
 class LaunchResponse(BaseModel):

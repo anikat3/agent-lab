@@ -17,7 +17,7 @@ from app.run_store import RunStore
 from app.schemas import ScenarioSpec
 from app.worker import SHUTDOWN_MESSAGE, Worker
 
-from .conftest import make_settings, queue_run, run_status, wait_until
+from .conftest import make_api_app, make_settings, queue_run, run_status, wait_until
 
 S1 = "a1a1a1a1-0000-4000-8000-000000000001"
 S2 = "a1a1a1a1-0000-4000-8000-000000000002"
@@ -332,7 +332,8 @@ def test_poll_loop_survives_database_errors(client, store):
 # --- app integration: no executor, lifespan worker, shutdown, restart -------------------
 
 
-def test_without_executor_runs_stay_queued(app, client):
+def test_api_only_app_leaves_runs_queued(app, client):
+    """start_worker=False: launches are accepted, but nothing in this process executes them."""
     ext_id = queue_run(client)
     assert app.state.worker is None
     time.sleep(0.2)
@@ -378,7 +379,7 @@ def test_shutdown_lets_in_flight_run_finish_within_grace(tmp_path):
 
 def test_restart_recovers_crashed_run_without_rerunning_it(tmp_path):
     settings = make_settings(tmp_path, worker_lease_seconds=30)
-    with TestClient(create_app(settings)) as client:
+    with TestClient(make_api_app(tmp_path, worker_lease_seconds=30)) as client:
         ext_id = queue_run(client)
         store: RunStore = client.app.state.run_store  # type: ignore[attr-defined]
         # A worker that claimed the run a minute ago, stored one result, then died.

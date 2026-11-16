@@ -28,6 +28,7 @@ from sqlalchemy.exc import OperationalError
 
 from app import lifecycle
 from app.execution import ExecutionError, RunSpec, ScenarioExecutor, ScenarioOutcome
+from app.llm import redact_secrets
 from app.run_store import RunNotOwned, RunStore
 
 logger = logging.getLogger(__name__)
@@ -192,10 +193,11 @@ class Worker:
             logger.warning("Executor timed out on %s", run.external_run_id, exc_info=True)
             return Outcome(lifecycle.FAILED, lifecycle.EXECUTION_ERROR, f"Executor timed out ({done}/{total} scenarios done)")
         except ExecutionError as e:
-            return Outcome(lifecycle.FAILED, e.code, e.message)
+            logger.warning("Run %s failed: %s %s", run.external_run_id, e.code, e.message)
+            return Outcome(lifecycle.FAILED, e.code, redact_secrets(e.message))
         except Exception as e:
             logger.exception("Executor failed on %s", run.external_run_id)
-            return Outcome(lifecycle.FAILED, lifecycle.EXECUTION_ERROR, f"{type(e).__name__}: {e}"[:1000])
+            return Outcome(lifecycle.FAILED, lifecycle.EXECUTION_ERROR, redact_secrets(f"{type(e).__name__}: {e}")[:1000])
         return Outcome(lifecycle.COMPLETED)
 
     async def _finish(self, run: RunSpec, outcome: Outcome) -> None:

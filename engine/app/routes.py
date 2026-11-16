@@ -1,16 +1,17 @@
 """HTTP endpoints. Thin layer: validate, call the repository, shape the response."""
 
-from fastapi import APIRouter, Depends, Header, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from sqlalchemy.orm import Session
 
 from app import __version__
 from app.auth import require_api_key
 from app.db import get_session
 from app.errors import ApiError
-from app.eval_config import validate_scenario_configs
+from app.eval_config import validate_executor_support, validate_scenario_configs
 from app.models import Run
 from app.repository import DuplicateRunError, create_or_get_run, get_run
 from app.schemas import (
+    ExecutionInfo,
     HealthResponse,
     LaunchRequest,
     LaunchResponse,
@@ -25,22 +26,34 @@ router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 @router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(version=__version__)
+def health(request: Request) -> HealthResponse:
+    execution = request.app.state.execution
+    return HealthResponse(
+        version=__version__,
+        execution=ExecutionInfo(available=execution.available, executor=execution.executor, reason=execution.reason),
+    )
 
 
 @router.post("/runs", response_model=LaunchResponse, status_code=status.HTTP_202_ACCEPTED)
 def launch_run(
     req: LaunchRequest,
+    request: Request,
     session: Session = Depends(get_session),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> LaunchResponse:
+    # Accepting a run nothing will execute would leave it queued forever. 503 is the
+    # contract's "retry later" code; the app shows the reason once its retries run out.
+    execution = request.app.state.execution
+    if not execution.available:
+        raise ApiError(503, "UNAVAILABLE", f"Run execution is unavailable: {execution.reason}")
+
     # The contract says the key *is* the run id. A mismatch means a client bug, and
     # silently picking one of the two would make retries behave unpredictably.
     if idempotency_key is not None and idempotency_key != req.run_id:
         raise ApiError(400, "INVALID_REQUEST", "Idempotency-Key header must equal run_id")
 
     validate_scenario_configs(req.scenarios)
+    validate_executor_support(req, request.app.state.executor)
 
     try:
         outcome = create_or_get_run(session, req)

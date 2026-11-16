@@ -10,6 +10,9 @@ dependencies = [
     "pydantic-settings>=2.3,<3.0",
     "sqlalchemy>=2.0,<3.0",
     "jsonschema>=4.22,<5.0",
+    "langgraph>=1.2,<2.0",
+    "langchain-core>=1.8,<2.0",
+    "langchain-openai>=1.8,<2.0",
 ]
 
 [project.optional-dependencies]
@@ -27,4 +30,8 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# Live tests are deselected by default; running them takes BOTH `-m live` and RUN_LIVE_TESTS=1.
+addopts = "-q -m 'not live'"
+markers = [
+    "live: calls a real external API and costs money; skipped unless RUN_LIVE_TESTS=1",
+]

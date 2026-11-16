@@ -26,6 +26,17 @@ WORKER_INTERRUPTED = "WORKER_INTERRUPTED"  # worker crashed, restarted or shut d
 EXECUTION_ERROR = "EXECUTION_ERROR"  # executor raised an unexpected exception
 INVALID_EXECUTOR_OUTPUT = "INVALID_EXECUTOR_OUTPUT"  # executor returned something unusable
 
+# Raised by the LangGraph executor (Milestone 2B). These are infrastructure failures:
+# they fail the run, unlike an agent answer that fails its evaluation.
+MODEL_AUTH_FAILED = "MODEL_AUTH_FAILED"  # provider rejected the API key / denied access
+MODEL_NOT_FOUND = "MODEL_NOT_FOUND"  # provider does not know the model (or the key can't use it)
+MODEL_RATE_LIMITED = "MODEL_RATE_LIMITED"  # rate limit or quota, after the client's retries
+MODEL_TIMEOUT = "MODEL_TIMEOUT"  # one model call exceeded MODEL_TIMEOUT_SECONDS
+MODEL_BAD_REQUEST = "MODEL_BAD_REQUEST"  # provider rejected the request (e.g. context too long)
+MODEL_PROVIDER_ERROR = "MODEL_PROVIDER_ERROR"  # provider unreachable or 5xx, after retries
+UNSUPPORTED_MODEL = "UNSUPPORTED_MODEL"  # no provider integration for this model name
+UNSUPPORTED_EVAL_TYPE = "UNSUPPORTED_EVAL_TYPE"  # no evaluator for this eval_type yet
+
 
 def can_transition(current: str, new: str) -> bool:
     return new in TRANSITIONS.get(current, frozenset())

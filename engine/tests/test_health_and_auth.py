@@ -8,7 +8,11 @@ from .conftest import AUTH, assert_error
 def test_health_ok(client):
     resp = client.get("/health", headers=AUTH)
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok", "version": __version__}
+    assert resp.json() == {
+        "status": "ok",
+        "version": __version__,
+        "execution": {"available": True, "executor": "not_executed", "reason": None},
+    }
 
 
 @pytest.mark.parametrize(
