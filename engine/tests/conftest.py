@@ -1,4 +1,5 @@
 import copy
+import time
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.main import create_app
+from app.run_store import RunStore
 
 API_KEY = "test-key"
 AUTH = {"Authorization": f"Bearer {API_KEY}"}
@@ -87,6 +89,50 @@ def payload() -> dict[str, Any]:
 def launch(client: TestClient, payload: dict[str, Any], **headers: str):  # type: ignore[no-untyped-def]
     h = {**AUTH, "Idempotency-Key": payload["run_id"], **headers}
     return client.post("/runs", json=payload, headers=h)
+
+
+def queue_run(client: TestClient, **overrides: Any) -> str:
+    """Launch a fresh run (2 scenarios) through the real API and return its external_run_id."""
+    p = copy.deepcopy(_BASE_PAYLOAD)
+    p["run_id"] = str(uuid.uuid4())
+    p.update(overrides)
+    resp = launch(client, p)
+    assert resp.status_code == 202, resp.text
+    return resp.json()["external_run_id"]
+
+
+def run_status(client: TestClient, external_run_id: str) -> dict[str, Any]:
+    resp = client.get(f"/runs/{external_run_id}", headers=AUTH)
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def wait_until(predicate, timeout: float = 5.0, interval: float = 0.02):  # type: ignore[no-untyped-def]
+    """Poll `predicate` until it returns something truthy; fail after `timeout` seconds."""
+    deadline = time.monotonic() + timeout
+    while True:
+        value = predicate()
+        if value:
+            return value
+        if time.monotonic() > deadline:
+            raise AssertionError(f"condition not met within {timeout}s")
+        time.sleep(interval)
+
+
+@pytest.fixture
+def store(app: FastAPI, client: TestClient) -> RunStore:
+    """The app's RunStore, after the lifespan has migrated the database."""
+    return app.state.run_store
+
+
+def make_settings(tmp_path, **overrides: Any) -> Settings:  # type: ignore[no-untyped-def]
+    values: dict[str, Any] = {
+        "eval_engine_api_key": API_KEY,
+        "database_url": f"sqlite:///{tmp_path / 'test.db'}",
+        "worker_poll_interval_seconds": 0.02,
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 def assert_error(resp, status: int, code: str) -> dict[str, Any]:  # type: ignore[no-untyped-def]

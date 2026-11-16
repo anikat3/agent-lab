@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,13 @@ def register_error_handlers(app: FastAPI) -> None:
     async def _http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         code = _STATUS_CODES.get(exc.status_code, "INTERNAL_ERROR" if exc.status_code >= 500 else "INVALID_REQUEST")
         return error_response(exc.status_code, code, str(exc.detail), headers=getattr(exc, "headers", None))
+
+    @app.exception_handler(OperationalError)
+    async def _database_unavailable(_: Request, exc: OperationalError) -> JSONResponse:
+        # Typically SQLite's "database is locked" after busy_timeout. The contract's 503
+        # UNAVAILABLE tells AgentLab to retry the launch with backoff.
+        logger.warning("Database unavailable: %s", exc.orig)
+        return error_response(503, "UNAVAILABLE", "Database is busy; retry shortly")
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:

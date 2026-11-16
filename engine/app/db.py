@@ -35,12 +35,12 @@ class Base(DeclarativeBase):
     pass
 
 
-def make_engine(database_url: str) -> Engine:
+def make_engine(database_url: str, sqlite_busy_timeout_ms: int = 5000) -> Engine:
     is_sqlite = database_url.startswith("sqlite")
     engine = create_engine(
         database_url,
-        # FastAPI runs sync endpoints in a thread pool, so one connection may be used
-        # from a thread other than the one that opened it.
+        # The API's thread pool and the worker's asyncio.to_thread calls both use pooled
+        # connections from threads other than the one that opened them.
         connect_args={"check_same_thread": False} if is_sqlite else {},
     )
     if is_sqlite:
@@ -49,6 +49,14 @@ def make_engine(database_url: str) -> Engine:
         def _sqlite_pragmas(dbapi_conn, _record):  # type: ignore[no-untyped-def]
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")  # SQLite ignores FKs unless asked
+            # WAL: readers never block the writer and the writer never blocks readers, so
+            # API polls keep working while the worker writes results. (No-op in memory.)
+            cur.execute("PRAGMA journal_mode=WAL")
+            # Safe with WAL; only the last transactions can be lost on power failure.
+            cur.execute("PRAGMA synchronous=NORMAL")
+            # SQLite allows one writer at a time. Instead of failing immediately with
+            # "database is locked", wait this long for the other writer to finish.
+            cur.execute(f"PRAGMA busy_timeout={int(sqlite_busy_timeout_ms)}")
             cur.close()
 
     return engine

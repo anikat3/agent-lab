@@ -2,13 +2,16 @@
 
 runs              one row per launched run (keyed by the app's run_id for idempotency)
 run_scenarios     the scenarios to execute, frozen at launch time
-scenario_results  one row per evaluated scenario, written by the execution worker (Milestone 2)
+scenario_results  one row per evaluated scenario, written by the worker
+
+The schema is created and changed by app/migrations.py, not by create_all(). Any change
+here needs a matching migration (tests/test_database.py checks they agree).
 """
 
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base, UTCDateTime
@@ -20,6 +23,7 @@ def utcnow() -> datetime:
 
 class Run(Base):
     __tablename__ = "runs"
+    __table_args__ = (Index("ix_runs_status_lease", "status", "lease_expires_at"),)
 
     external_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     # The app's run id doubles as the idempotency key; the unique index is what makes
@@ -37,6 +41,13 @@ class Run(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+
+    # Ownership lease (migration 2). While a run is `running`, the worker that claimed it
+    # keeps pushing lease_expires_at forward. A running run whose lease has expired has
+    # no live owner and is recovered as WORKER_INTERRUPTED. worker_id is kept after the
+    # run ends, for debugging.
+    worker_id: Mapped[str | None] = mapped_column(String(100))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
     scenarios: Mapped[list["RunScenario"]] = relationship(
         back_populates="run", order_by="RunScenario.position", cascade="all, delete-orphan"
