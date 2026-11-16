@@ -3,11 +3,11 @@
 The Python service the AgentLab app calls to run evaluation suites. It implements the REST
 contract in [`../docs/api-contract.md`](../docs/api-contract.md).
 
-**Status: Milestone 2C.** Runs are executed for real. A background worker claims each
-run, sends every scenario through a LangGraph workflow that calls the agent's OpenAI
-model via LangChain, evaluates the reply with a deterministic evaluator, and stores the
-result. Supported eval types are `keyword`, `exact` and `json_schema`, and one run may
-mix them. `llm_judge` (Milestone 2D) is rejected at launch.
+**Status: Milestone 2D.** All four AgentLab eval types work, and one run may mix them.
+A background worker claims each run and sends every scenario through a LangGraph
+workflow. The workflow calls the agent's OpenAI model via LangChain, grades the reply
+(deterministically for `keyword`, `exact` and `json_schema`, or with a second "judge"
+model call for `llm_judge`), and stores the result.
 
 ## Run locally
 
@@ -66,18 +66,52 @@ OPENAI_BASE_URL=http://127.0.0.1:8799/v1 OPENAI_API_KEY=sk-local-test-key-not-a-
 | `OPENAI_BASE_URL` | real OpenAI API | Point at an OpenAI-compatible endpoint instead (the local fake server, a proxy). |
 | `MODEL_TIMEOUT_SECONDS` | `60` | Budget for one model call, retries included (`MODEL_TIMEOUT` if exceeded). |
 | `MODEL_MAX_RETRIES` | `2` | Client retries for rate limits, 5xx and connection errors. |
+| `DEFAULT_JUDGE_MODEL` | unset | Judge for `llm_judge` scenarios without their own `judge_model`. Unset means such scenarios are rejected at launch; the engine never picks a paid model on its own. |
+| `JUDGE_OUTPUT_RETRIES` | `0` | Extra judge calls when the judge's reply is malformed (0–2). Each one is another paid call. |
 
 Variables are read from the environment, then from `engine/.env` (git-ignored).
 
 ## The evaluation workflow (LangGraph)
 
 ```text
-START -> call_agent -> evaluate -> END          (one graph invocation per scenario)
+                          ┌─ evaluate: EVALUATORS[eval_type]  (keyword | exact | json_schema) ─┐
+START -> call_agent ──────┤                                                                    ├─> END
+          (route by type) └─ judge: judge model, structured output          (llm_judge)        ┘
 
 call_agent  [system_prompt] + scenario messages (order and roles kept) -> ChatOpenAI.ainvoke
             -> state.response, state.latency_ms
-evaluate    EVALUATORS[eval_type](response, eval_config) -> state.evaluation
+evaluate    pure function, never calls a model             -> state.evaluation
+judge       one more model call (with_structured_output)   -> state.evaluation
 ```
+
+### LLM-as-judge
+
+- **Config:** `{rubric, pass_threshold, judge_model?}`. The judge model is the scenario's
+  `judge_model`, else `DEFAULT_JUDGE_MODEL`. If neither is set, the launch is rejected
+  with `422`, as is a judge model this engine can't call.
+- **Frozen at launch:** the resolved judge model is stored with the run
+  (`run_scenarios.judge_model`, migration 3), so changing `DEFAULT_JUDGE_MODEL` later never
+  changes who grades a queued run. A replayed launch keeps the original model.
+  `evaluator_details.judge_model_frozen` is `false` only for runs stored before this
+  existed; those resolve against the current default.
+- **Prompt:** the rubric goes in the system message. The conversation, the agent's reply
+  and the reference answer (`expected_response`, if set) are untrusted, so they're
+  JSON-encoded into one user message: text inside them can't pose as instructions, and
+  the judge is told to treat them purely as data.
+- **Output:** strict JSON Schema structured output into `JudgeResult {score, reasoning}`.
+  The score must be a finite number in [0, 1] (no strings, NaN or Infinity), the
+  reasoning must be non-empty, and no extra fields are allowed. Reasoning longer than
+  600 characters is trimmed for the dashboard.
+- **Result:** `passed = score >= pass_threshold`; `quality_score` is the real score.
+  Below the threshold is a normal failed result (`judge_below_threshold`, with the
+  judge's reasoning) and the run continues. `evaluator_details` records the judge model
+  and where it came from, the score, threshold, reasoning, attempts and judge latency.
+- **Judge failures fail the run** with `JUDGE_AUTH_FAILED`, `JUDGE_NOT_FOUND`,
+  `JUDGE_RATE_LIMITED`, `JUDGE_TIMEOUT`, `JUDGE_BAD_REQUEST`, `JUDGE_PROVIDER_ERROR` or
+  `JUDGE_INVALID_OUTPUT` (unparseable, missing fields, score out of range). A score is
+  never invented.
+- **Cost:** every `llm_judge` scenario makes **two** model calls (agent plus judge), plus
+  `JUDGE_OUTPUT_RETRIES` extra calls on malformed replies. Deterministic types make one.
 
 - **Evaluators** (`app/evaluators.py`): pure functions, no LLM, binary score (1.0 / 0.0).
   `EVALUATORS[eval_type]` picks one per scenario.
@@ -85,7 +119,7 @@ evaluate    EVALUATORS[eval_type](response, eval_config) -> state.evaluation
   | eval_type | Passes when | Failure categories |
   |---|---|---|
   | `keyword` | Every `required` keyword appears and no `forbidden` keyword does (substring match, case-insensitive unless `case_sensitive`) | `keyword_missing`, `forbidden_content` (wins when both apply) |
-  | `exact` | The response equals `expected` (Unicode NFC always; case-insensitive unless `case_sensitive`; whitespace significant unless `normalize_whitespace`, which collapses runs and trims; punctuation always counts) | `exact_mismatch` |
+  | `exact` | The response equals `expected` (Unicode NFC always). If omitted, `case_sensitive` defaults to **true** and `normalize_whitespace` to **false**; the app's scenario form starts from the same values. Normalising collapses whitespace runs and trims; punctuation always counts | `exact_mismatch` |
   | `json_schema` | The response is strict JSON (no code fences, NaN or duplicate keys) that validates against `schema`, using the draft named by `$schema` (latest by default) | `invalid_json`, `schema_violation` |
 
   Failure details say *where* a response failed (first differing position, JSON paths
@@ -233,6 +267,7 @@ app/
   graph.py        LangGraph workflow + LangGraphExecutor + build_executor(settings)
   llm.py          model resolution, message construction, ChatOpenAI registry, error mapping
   evaluators.py   deterministic evaluators (keyword, exact, json_schema) + registry
+  judge.py        LLM-as-judge: prompt, JudgeResult validation, judge call
   run_store.py    worker-side database operations (claim, lease, results, finish, recover)
   worker.py       background worker
 tests/            pytest suite (mocked models; test_live_openai.py is opt-in)

@@ -20,7 +20,7 @@ def test_identical_text_passes():
     assert ev.failure_category is None and ev.failure_explanation is None
     assert ev.details == {
         "evaluator": "exact",
-        "case_sensitive": False,
+        "case_sensitive": True,
         "normalize_whitespace": False,
         "compared_length": {"response": 24, "expected": 24},
     }
@@ -47,8 +47,46 @@ def test_prefix_of_expected_fails_at_end_of_shorter_text():
 # --- case ------------------------------------------------------------------------------------
 
 
-def test_case_insensitive_by_default():
-    assert evaluate_exact("YOUR REFUND IS APPROVED.", exact("Your refund is approved.")).passed
+# --- defaults when optional flags are omitted (regression) ----------------------------------
+
+
+def test_omitted_flags_mean_case_sensitive_and_whitespace_significant():
+    cfg = ExactConfig.model_validate({"expected": "Your refund is approved."})  # flags omitted
+    assert (cfg.case_sensitive, cfg.normalize_whitespace) == (None, None)
+    ev = evaluate_exact("Your refund is approved.", cfg)
+    assert ev.passed
+    assert (ev.details["case_sensitive"], ev.details["normalize_whitespace"]) == (True, False)
+
+
+def test_omitted_case_flag_rejects_case_differences():
+    ev = evaluate_exact("YOUR REFUND IS APPROVED.", ExactConfig.model_validate({"expected": "Your refund is approved."}))
+    assert not ev.passed
+    assert ev.details["differs_only_by_case"] is True
+
+
+def test_omitted_whitespace_flag_rejects_whitespace_differences():
+    ev = evaluate_exact("Your refund is approved.\n", ExactConfig.model_validate({"expected": "Your refund is approved."}))
+    assert not ev.passed
+    assert ev.details["differs_only_by_whitespace"] is True
+
+
+def test_omitting_one_flag_keeps_the_other_explicit_value():
+    only_ws = ExactConfig.model_validate({"expected": "Your refund is approved.", "normalize_whitespace": True})
+    assert evaluate_exact(" Your refund  is approved. ", only_ws).passed  # whitespace ignored...
+    assert not evaluate_exact("your refund is approved.", only_ws).passed  # ...case still counts
+
+    only_case = ExactConfig.model_validate({"expected": "Your refund is approved.", "case_sensitive": False})
+    assert evaluate_exact("YOUR REFUND IS APPROVED.", only_case).passed
+    assert not evaluate_exact("Your refund is approved. ", only_case).passed
+
+
+def test_explicit_false_and_true_override_both_defaults():
+    cfg = ExactConfig.model_validate({"expected": "Approved", "case_sensitive": False, "normalize_whitespace": True})
+    assert evaluate_exact("  approved\n", cfg).passed
+
+
+def test_case_insensitive_when_requested():
+    assert evaluate_exact("YOUR REFUND IS APPROVED.", exact("Your refund is approved.", case_sensitive=False)).passed
 
 
 def test_case_sensitive_fails_and_explains_case_only_difference():
@@ -60,7 +98,7 @@ def test_case_sensitive_fails_and_explains_case_only_difference():
 
 
 def test_case_folding_uses_casefold():
-    assert evaluate_exact("STRASSE", exact("straße")).passed
+    assert evaluate_exact("STRASSE", exact("straße", case_sensitive=False)).passed
 
 
 # --- whitespace ------------------------------------------------------------------------------

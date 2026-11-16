@@ -23,9 +23,13 @@ before it is stored (an executor without them accepts everything):
 
 - `supported_eval_types: frozenset[str]`: unsupported types -> 422 INVALID_EVAL_CONFIG.
 - `supports_model(model: str) -> bool`: unsupported model -> 400 INVALID_REQUEST.
+- `scenario_problems(scenario) -> list[str]`: anything else the executor can't run for
+  that scenario (e.g. no judge model configured) -> 422 INVALID_EVAL_CONFIG.
+- `resolve_judge_model(scenario) -> str | None`: the judge model to freeze with the run.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -45,6 +49,8 @@ class RunSpec:
     timeout_seconds: int
     started_at: datetime
     scenarios: tuple[ScenarioSpec, ...]
+    # llm_judge scenario_id -> judge model frozen at launch (absent for older runs).
+    judge_models: Mapping[str, str] = field(default_factory=dict)
 
 
 class ScenarioOutcome(BaseModel):

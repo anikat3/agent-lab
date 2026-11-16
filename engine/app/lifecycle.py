@@ -37,6 +37,18 @@ MODEL_PROVIDER_ERROR = "MODEL_PROVIDER_ERROR"  # provider unreachable or 5xx, af
 UNSUPPORTED_MODEL = "UNSUPPORTED_MODEL"  # no provider integration for this model name
 UNSUPPORTED_EVAL_TYPE = "UNSUPPORTED_EVAL_TYPE"  # no evaluator for this eval_type yet
 
+# LLM-as-judge failures (Milestone 2D). Same causes as the MODEL_* codes, but for the judge
+# call, so it is clear whether the agent or the grader failed. A low judge score is NOT
+# one of these: it is a normal failed result (failure_category judge_below_threshold).
+JUDGE_AUTH_FAILED = "JUDGE_AUTH_FAILED"
+JUDGE_NOT_FOUND = "JUDGE_NOT_FOUND"
+JUDGE_RATE_LIMITED = "JUDGE_RATE_LIMITED"
+JUDGE_TIMEOUT = "JUDGE_TIMEOUT"
+JUDGE_BAD_REQUEST = "JUDGE_BAD_REQUEST"
+JUDGE_PROVIDER_ERROR = "JUDGE_PROVIDER_ERROR"
+JUDGE_INVALID_OUTPUT = "JUDGE_INVALID_OUTPUT"  # reply missing fields, unparseable, score not in [0, 1]
+JUDGE_NOT_CONFIGURED = "JUDGE_NOT_CONFIGURED"  # no judge_model and no DEFAULT_JUDGE_MODEL
+
 
 def can_transition(current: str, new: str) -> bool:
     return new in TRANSITIONS.get(current, frozenset())

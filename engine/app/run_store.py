@@ -194,6 +194,7 @@ class RunStore:
                 )
                 for s in run.scenarios
             ),
+            judge_models={s.scenario_id: s.judge_model for s in run.scenarios if s.judge_model},
         )
 
 

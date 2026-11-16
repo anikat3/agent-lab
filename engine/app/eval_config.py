@@ -80,6 +80,16 @@ def validate_executor_support(req: LaunchRequest, executor: object) -> None:
         if invalid:
             raise ApiError(422, "INVALID_EVAL_CONFIG", f'Scenario "{invalid[0]["name"]}": {invalid[0]["problems"][0]}', {"scenarios": invalid})
 
+    scenario_problems = getattr(executor, "scenario_problems", None)
+    if scenario_problems is not None:
+        invalid = [
+            {"scenario_id": s.id, "name": s.name, "problems": problems}
+            for s in req.scenarios
+            if (problems := scenario_problems(s))
+        ]
+        if invalid:
+            raise ApiError(422, "INVALID_EVAL_CONFIG", f'Scenario "{invalid[0]["name"]}": {invalid[0]["problems"][0]}', {"scenarios": invalid})
+
     supports_model = getattr(executor, "supports_model", None)
     if supports_model is not None and not supports_model(req.agent.model):
         raise ApiError(

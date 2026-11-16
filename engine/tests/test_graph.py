@@ -54,13 +54,16 @@ def execute(executor: LangGraphExecutor, sc: ScenarioSpec) -> ScenarioOutcome:
 # --- the graph itself ---------------------------------------------------------------------
 
 
-def test_graph_has_two_nodes_wired_in_sequence():
+def test_graph_routes_conditionally_after_the_agent_call():
     graph = build_eval_graph(FakeModels(FakeChatModel(lambda m: "x")), 5).get_graph()
-    assert set(graph.nodes) == {"__start__", "call_agent", "evaluate", "__end__"}
-    assert {(e.source, e.target) for e in graph.edges} == {
-        ("__start__", "call_agent"),
-        ("call_agent", "evaluate"),
-        ("evaluate", "__end__"),
+    assert set(graph.nodes) == {"__start__", "call_agent", "evaluate", "judge", "__end__"}
+    edges = {(e.source, e.target, e.conditional) for e in graph.edges}
+    assert edges == {
+        ("__start__", "call_agent", False),
+        ("call_agent", "evaluate", True),  # conditional: deterministic evaluators
+        ("call_agent", "judge", True),  # conditional: llm_judge
+        ("evaluate", "__end__", False),
+        ("judge", "__end__", False),
     }
 
 
@@ -149,17 +152,18 @@ def test_unexpected_model_exception_propagates_unchanged():
 
 
 def test_unsupported_eval_type_fails_before_any_model_call():
+    """Launch rejects unknown types; this guards runs stored before a type was removed."""
     model = FakeChatModel(lambda m: "x")
     executor = LangGraphExecutor(FakeModels(model), model_timeout_seconds=5)
     with pytest.raises(ExecutionError) as e:
-        execute(executor, scenario(eval_type="llm_judge"))
+        execute(executor, scenario(eval_type="regex"))
     assert e.value.code == lc.UNSUPPORTED_EVAL_TYPE
     assert model.calls == []
 
 
 def test_capabilities():
     executor = LangGraphExecutor(FakeModels(FakeChatModel(lambda m: "x")), model_timeout_seconds=5)
-    assert executor.supported_eval_types == {"keyword", "exact", "json_schema"}
+    assert executor.supported_eval_types == {"keyword", "exact", "json_schema", "llm_judge"}
     assert executor.supports_model("gpt-4o-mini")
     assert not executor.supports_model("claude-sonnet-4")
 

@@ -91,6 +91,10 @@ def _quote(items: list[str]) -> str:
 
 # --- exact match ---------------------------------------------------------------------------
 
+# Used only when the scenario omits the flag. (AgentLab's scenario form always sends both.)
+EXACT_DEFAULT_CASE_SENSITIVE = True
+EXACT_DEFAULT_NORMALIZE_WHITESPACE = False
+
 
 def _exact_form(text: str, *, case_sensitive: bool, normalize_whitespace: bool) -> str:
     """The form both sides are compared in.
@@ -113,10 +117,13 @@ def _exact_form(text: str, *, case_sensitive: bool, normalize_whitespace: bool) 
 def evaluate_exact(response: str, config: ExactConfig) -> Evaluation:
     """Pass iff the response equals config.expected after the configured normalisation.
 
-    Defaults: case-insensitive (like keyword), whitespace significant. Score is binary.
+    Defaults when a flag is omitted: case-sensitive and whitespace-significant, i.e. a true
+    exact match. Unicode NFC normalisation always applies. Score is binary.
     """
-    case_sensitive = bool(config.case_sensitive)
-    normalize_whitespace = bool(config.normalize_whitespace)
+    case_sensitive = EXACT_DEFAULT_CASE_SENSITIVE if config.case_sensitive is None else config.case_sensitive
+    normalize_whitespace = (
+        EXACT_DEFAULT_NORMALIZE_WHITESPACE if config.normalize_whitespace is None else config.normalize_whitespace
+    )
     actual = _exact_form(response, case_sensitive=case_sensitive, normalize_whitespace=normalize_whitespace)
     expected = _exact_form(config.expected, case_sensitive=case_sensitive, normalize_whitespace=normalize_whitespace)
     details: dict[str, Any] = {

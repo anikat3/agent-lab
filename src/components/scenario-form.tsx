@@ -3,7 +3,13 @@ import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { createScenario, updateScenario } from "@/lib/api/suites.functions";
-import { EVAL_TYPE_LABELS, EVAL_TYPES, scenarioInputSchema, type EvalType } from "@/lib/api/eval-config";
+import {
+  EVAL_TYPE_LABELS,
+  EVAL_TYPES,
+  initialEvalFlags,
+  scenarioInputSchema,
+  type EvalType,
+} from "@/lib/api/eval-config";
 import type { Tables } from "@/integrations/supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +26,7 @@ const DEFAULT_MESSAGES = JSON.stringify([{ role: "user", content: "" }], null, 2
 
 export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; initial?: Scenario | undefined; onDone: () => void }) {
   const cfg0 = (initial?.eval_config ?? {}) as Cfg;
+  const flags0 = initialEvalFlags(initial?.eval_type, cfg0);
   const [name, setName] = useState(initial?.name ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [tags, setTags] = useState((initial?.tags ?? []).join(", "));
@@ -29,9 +36,11 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
   // type-specific fields
   const [required, setRequired] = useState(((cfg0["required"] as string[]) ?? []).join(", "));
   const [forbidden, setForbidden] = useState(((cfg0["forbidden"] as string[]) ?? []).join(", "));
-  const [caseSensitive, setCaseSensitive] = useState(Boolean(cfg0["case_sensitive"]));
+  // Separate per type: keyword defaults to case-insensitive, exact to case-sensitive.
+  const [keywordCaseSensitive, setKeywordCaseSensitive] = useState(flags0.keywordCaseSensitive);
+  const [exactCaseSensitive, setExactCaseSensitive] = useState(flags0.exactCaseSensitive);
   const [exactText, setExactText] = useState((cfg0["expected"] as string) ?? "");
-  const [normalizeWs, setNormalizeWs] = useState(cfg0["normalize_whitespace"] !== false);
+  const [normalizeWs, setNormalizeWs] = useState(flags0.exactNormalizeWhitespace);
   const [schemaText, setSchemaText] = useState(cfg0["schema"] ? JSON.stringify(cfg0["schema"], null, 2) : '{\n  "type": "object"\n}');
   const [rubric, setRubric] = useState((cfg0["rubric"] as string) ?? "");
   const [threshold, setThreshold] = useState(String(cfg0["pass_threshold"] ?? "0.7"));
@@ -52,13 +61,17 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
   function buildConfig(): Cfg | string {
     switch (evalType) {
       case "keyword": {
-        const c: Cfg = { required: splitList(required), case_sensitive: caseSensitive };
+        const c: Cfg = { required: splitList(required), case_sensitive: keywordCaseSensitive };
         const f = splitList(forbidden);
         if (f.length) c["forbidden"] = f;
         return c;
       }
       case "exact":
-        return { expected: exactText, normalize_whitespace: normalizeWs, case_sensitive: caseSensitive };
+        return {
+          expected: exactText,
+          normalize_whitespace: normalizeWs,
+          case_sensitive: exactCaseSensitive,
+        };
       case "json_schema":
         try {
           return { schema: JSON.parse(schemaText) };
@@ -123,14 +136,22 @@ export function ScenarioForm({ suiteId, initial, onDone }: { suiteId: string; in
           <>
             <div className="space-y-1.5"><Label>Required keywords</Label><Input value={required} onChange={(e) => setRequired(e.target.value)} placeholder="refund, 30 days" /></div>
             <div className="space-y-1.5"><Label>Forbidden keywords</Label><Input value={forbidden} onChange={(e) => setForbidden(e.target.value)} /></div>
-            <Toggle label="Case sensitive" checked={caseSensitive} onChange={setCaseSensitive} />
+            <Toggle
+              label="Case sensitive"
+              checked={keywordCaseSensitive}
+              onChange={setKeywordCaseSensitive}
+            />
           </>
         )}
         {evalType === "exact" && (
           <>
             <div className="space-y-1.5"><Label>Expected exact text</Label><Textarea rows={2} value={exactText} onChange={(e) => setExactText(e.target.value)} /></div>
             <Toggle label="Normalize whitespace" checked={normalizeWs} onChange={setNormalizeWs} />
-            <Toggle label="Case sensitive" checked={caseSensitive} onChange={setCaseSensitive} />
+            <Toggle
+              label="Case sensitive"
+              checked={exactCaseSensitive}
+              onChange={setExactCaseSensitive}
+            />
           </>
         )}
         {evalType === "json_schema" && (

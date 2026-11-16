@@ -79,6 +79,37 @@ export const llmJudgeConfigSchema = z
   })
   .strict();
 
+/**
+ * What the evaluation engine assumes when an optional flag is omitted. The scenario form
+ * starts from these, so a new scenario behaves the same whether or not the flag is sent.
+ */
+export const EVAL_FLAG_DEFAULTS = {
+  keyword: { case_sensitive: false },
+  exact: { case_sensitive: true, normalize_whitespace: false },
+} as const;
+
+/**
+ * Initial toggle values for the scenario form. A saved value is only reused when the
+ * scenario being edited already has that eval type; otherwise the type's default applies.
+ */
+export function initialEvalFlags(evalType: string | undefined, config: Record<string, unknown>) {
+  const flag = (type: EvalType, key: string, fallback: boolean): boolean =>
+    evalType === type && typeof config[key] === "boolean" ? (config[key] as boolean) : fallback;
+  return {
+    keywordCaseSensitive: flag(
+      "keyword",
+      "case_sensitive",
+      EVAL_FLAG_DEFAULTS.keyword.case_sensitive,
+    ),
+    exactCaseSensitive: flag("exact", "case_sensitive", EVAL_FLAG_DEFAULTS.exact.case_sensitive),
+    exactNormalizeWhitespace: flag(
+      "exact",
+      "normalize_whitespace",
+      EVAL_FLAG_DEFAULTS.exact.normalize_whitespace,
+    ),
+  };
+}
+
 export const evalConfigSchemas = {
   keyword: keywordConfigSchema,
   exact: exactConfigSchema,

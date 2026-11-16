@@ -146,8 +146,8 @@ def _versions(engine) -> list[int]:
 
 def test_fresh_database_gets_all_migrations(tmp_path, new_engine):
     engine = new_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
-    assert run_migrations(engine) == [1, 2]
-    assert _versions(engine) == [1, 2]
+    assert run_migrations(engine) == [1, 2, 3]
+    assert _versions(engine) == [1, 2, 3]
     assert run_migrations(engine) == []  # idempotent
 
 
@@ -176,7 +176,7 @@ def test_milestone_1_database_is_upgraded_without_losing_data(tmp_path, new_engi
             )
         )
 
-    assert run_migrations(engine) == [1, 2]
+    assert run_migrations(engine) == [1, 2, 3]
     with engine.connect() as conn:
         row = conn.execute(text("SELECT run_id, status, worker_id, lease_expires_at FROM runs")).one()
     assert tuple(row) == ("rid", "queued", None, None)
@@ -190,11 +190,11 @@ def test_failed_migration_rolls_back_completely(tmp_path, new_engine):
         raise RuntimeError("migration bug")
 
     with pytest.raises(RuntimeError):
-        run_migrations(engine, [*MIGRATIONS, (3, "broken", half_then_fail)])
+        run_migrations(engine, [*MIGRATIONS, (99, "broken", half_then_fail)])
 
-    # Nothing from the failed call persisted, not even migrations 1-2 from the same call.
+    # Nothing from the failed call persisted, not even the earlier migrations from the same call.
     assert not inspect(engine).has_table("runs")
-    assert run_migrations(engine) == [1, 2]
+    assert run_migrations(engine) == [1, 2, 3]
     assert "half_done" not in {c["name"] for c in inspect(engine).get_columns("runs")}
 
 
@@ -220,12 +220,12 @@ def test_concurrent_startups_apply_migrations_once(tmp_path):
     for t in threads:
         t.join()
     assert errors == []
-    assert sorted(applied) == [[], [], [], [1, 2]]
+    assert sorted(applied) == [[], [], [], [1, 2, 3]]
 
 
 def test_app_startup_runs_migrations(tmp_path, new_engine):
     app = create_app(make_settings(tmp_path))
     with TestClient(app):
         pass
-    assert _versions(new_engine(f"sqlite:///{tmp_path / 'test.db'}")) == [1, 2]
+    assert _versions(new_engine(f"sqlite:///{tmp_path / 'test.db'}")) == [1, 2, 3]
 

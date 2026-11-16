@@ -3,6 +3,7 @@
 import hashlib
 import json
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sqlalchemy import select
@@ -33,7 +34,9 @@ def new_external_run_id() -> str:
     return f"run_{uuid.uuid4().hex}"
 
 
-def create_or_get_run(session: Session, req: LaunchRequest) -> CreateRunOutcome:
+def create_or_get_run(
+    session: Session, req: LaunchRequest, judge_models: Mapping[str, str] | None = None
+) -> CreateRunOutcome:
     """Store a new queued run, or return the existing one if this run_id was seen before.
 
     Raises DuplicateRunError if the run_id exists with a different payload.
@@ -62,6 +65,7 @@ def create_or_get_run(session: Session, req: LaunchRequest) -> CreateRunOutcome:
                 expected_response=s.expected_response,
                 eval_type=s.eval_type,
                 eval_config=s.eval_config,
+                judge_model=(judge_models or {}).get(s.id),
             )
             for i, s in enumerate(req.scenarios)
         ],

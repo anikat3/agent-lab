@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     # Retries the provider client makes for transient errors (429, 5xx, connection).
     model_max_retries: int = Field(default=2, ge=0, le=10)
 
+    # LLM-as-judge. Used when an llm_judge scenario has no judge_model of its own. Unset by
+    # default: such scenarios are rejected at launch rather than silently using (and
+    # paying for) a model nobody chose.
+    default_judge_model: str | None = None
+    # Extra judge calls when the judge's reply is malformed (bad JSON, score out of range).
+    # 0 by default: each retry is another paid call, and strict structured output makes
+    # malformed replies rare. Transport errors are retried separately (MODEL_MAX_RETRIES).
+    judge_output_retries: int = Field(default=0, ge=0, le=2)
+
 
 @lru_cache
 def get_settings() -> Settings:

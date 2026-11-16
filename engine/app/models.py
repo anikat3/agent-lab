@@ -70,6 +70,10 @@ class RunScenario(Base):
     expected_response: Mapped[str | None] = mapped_column(Text)
     eval_type: Mapped[str] = mapped_column(String(32))
     eval_config: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # llm_judge only: the judge model resolved at launch (migration 3). Execution uses this,
+    # never the current DEFAULT_JUDGE_MODEL, so a queued run is judged by the model it was
+    # launched with. NULL for other eval types and for runs stored before migration 3.
+    judge_model: Mapped[str | None] = mapped_column(String(200))
 
     run: Mapped[Run] = relationship(back_populates="scenarios")
 

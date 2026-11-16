@@ -184,8 +184,8 @@ def test_repeated_mixed_launch_executes_each_scenario_once(tmp_path):
     assert len(model.calls) == 6
 
 
-def test_llm_judge_is_still_rejected_at_launch(tmp_path):
-    executor = LangGraphExecutor(FakeModels(FakeChatModel(lambda m: "x")), model_timeout_seconds=5)
+def test_llm_judge_needs_a_configured_judge_at_launch(tmp_path):
+    executor = LangGraphExecutor(FakeModels(FakeChatModel(lambda m: "x")), model_timeout_seconds=5)  # no default judge
     payload = mixed_payload()
     payload["scenarios"].append(
         scenario("judge", "Be polite", "llm_judge", {"rubric": "Is the reply polite and accurate?", "pass_threshold": 0.7})
@@ -193,4 +193,6 @@ def test_llm_judge_is_still_rejected_at_launch(tmp_path):
     with TestClient(create_app(make_settings(tmp_path), executor=executor)) as client:
         resp = launch(client, payload)
     assert resp.status_code == 422
-    assert json.loads(resp.text)["error"]["details"]["scenarios"][0]["scenario_id"] == "judge"
+    [bad] = json.loads(resp.text)["error"]["details"]["scenarios"]
+    assert bad["scenario_id"] == "judge"
+    assert bad["problems"] == ["judge_model is not set and the engine has no DEFAULT_JUDGE_MODEL"]

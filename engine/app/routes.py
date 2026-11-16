@@ -56,7 +56,7 @@ def launch_run(
     validate_executor_support(req, request.app.state.executor)
 
     try:
-        outcome = create_or_get_run(session, req)
+        outcome = create_or_get_run(session, req, freeze_judge_models(req, request.app.state.executor))
     except DuplicateRunError:
         raise ApiError(
             409,
@@ -72,6 +72,15 @@ def get_run_status(external_run_id: str, session: Session = Depends(get_session)
     if run is None:
         raise ApiError(404, "RUN_NOT_FOUND", f"No run with id {external_run_id}")
     return _to_status_response(run)
+
+
+def freeze_judge_models(req: LaunchRequest, executor: object) -> dict[str, str]:
+    """scenario_id -> judge model, resolved now so it is stored with the run. An idempotent
+    replay returns the run stored the first time, with the models frozen back then."""
+    resolve = getattr(executor, "resolve_judge_model", None)
+    if resolve is None:
+        return {}
+    return {s.id: model for s in req.scenarios if (model := resolve(s))}
 
 
 def _to_status_response(run: Run) -> RunStatusResponse:

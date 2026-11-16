@@ -267,18 +267,17 @@ def test_langgraph_executor_enabled_from_environment(tmp_path, monkeypatch):
     assert FAKE_KEY not in repr(settings)
 
 
-def test_unsupported_eval_types_are_rejected_before_storage(tmp_path, payload):
-    executor, model = executor_with(answer_by_question)
+def test_llm_judge_without_any_judge_model_is_rejected_before_storage(tmp_path, payload):
+    """No judge_model on the scenario and no DEFAULT_JUDGE_MODEL: refuse rather than guess."""
+    executor, model = executor_with(answer_by_question)  # no default judge configured
     app = create_app(make_settings(tmp_path), executor=executor)
-    # A valid llm_judge scenario next to a keyword one: llm_judge has no evaluator until 2D.
     payload["scenarios"][1]["eval_type"] = "llm_judge"
     payload["scenarios"][1]["eval_config"] = {"rubric": "Is the answer polite and correct?", "pass_threshold": 0.7}
     with TestClient(app) as client:
         err = assert_error(launch(client, payload), 422, "INVALID_EVAL_CONFIG")
         [bad] = err["details"]["scenarios"]
         assert bad["scenario_id"] == payload["scenarios"][1]["id"]
-        assert "'llm_judge' is not supported" in bad["problems"][0]
-        assert "supported: exact, json_schema, keyword" in bad["problems"][0]
+        assert bad["problems"] == ["judge_model is not set and the engine has no DEFAULT_JUDGE_MODEL"]
         with app.state.session_factory() as s:
             assert s.scalar(select(func.count()).select_from(Run)) == 0
     assert model.calls == []

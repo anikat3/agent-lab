@@ -105,9 +105,16 @@ def _v2_worker_lease(conn: Connection) -> None:
     conn.execute(text("CREATE INDEX ix_runs_status_lease ON runs (status, lease_expires_at)"))
 
 
+def _v3_frozen_judge_model(conn: Connection) -> None:
+    """The judge model resolved at launch, so DEFAULT_JUDGE_MODEL changes can't alter a
+    queued run (Milestone 2D). NULL for non-judge scenarios and for older runs."""
+    conn.execute(text("ALTER TABLE run_scenarios ADD COLUMN judge_model VARCHAR(200)"))
+
+
 MIGRATIONS: list[Migration] = [
     (1, "baseline", _v1_baseline),
     (2, "worker_lease", _v2_worker_lease),
+    (3, "frozen_judge_model", _v3_frozen_judge_model),
 ]
 
 

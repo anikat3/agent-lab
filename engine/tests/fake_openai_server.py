@@ -26,6 +26,11 @@ class FakeRequest:
     model: str
     messages: list[dict[str, Any]]
     authorization: str
+    response_format: dict[str, Any] | None = None  # set for structured-output (judge) calls
+
+    @property
+    def is_structured(self) -> bool:
+        return self.response_format is not None
 
     @property
     def last_user_message(self) -> str:
@@ -56,7 +61,12 @@ class FakeOpenAIServer:
 
             def do_POST(self) -> None:
                 body = json.loads(self.rfile.read(int(self.headers["content-length"])))
-                req = FakeRequest(body.get("model", ""), body.get("messages", []), self.headers.get("authorization", ""))
+                req = FakeRequest(
+                    body.get("model", ""),
+                    body.get("messages", []),
+                    self.headers.get("authorization", ""),
+                    body.get("response_format"),
+                )
                 owner.requests.append(req)
                 if not self.path.endswith("/chat/completions"):
                     return self._send(404, _error("Unknown endpoint", "unknown_url"))
@@ -79,7 +89,7 @@ class FakeOpenAIServer:
                 pass
 
         self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+        threading.Thread(target=self._server.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True).start()
         return self
 
     @property
