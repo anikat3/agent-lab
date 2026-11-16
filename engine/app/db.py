@@ -1,5 +1,7 @@
 """SQLAlchemy engine and session setup."""
 
+import sqlite3
+import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
 
@@ -48,18 +50,40 @@ def make_engine(database_url: str, sqlite_busy_timeout_ms: int = 5000) -> Engine
         @event.listens_for(engine, "connect")
         def _sqlite_pragmas(dbapi_conn, _record):  # type: ignore[no-untyped-def]
             cur = dbapi_conn.cursor()
+            # SQLite allows one writer at a time. Instead of failing immediately with
+            # "database is locked", wait this long for the other writer to finish.
+            # Set first so the statements below also wait.
+            cur.execute(f"PRAGMA busy_timeout={int(sqlite_busy_timeout_ms)}")
             cur.execute("PRAGMA foreign_keys=ON")  # SQLite ignores FKs unless asked
             # WAL: readers never block the writer and the writer never blocks readers, so
             # API polls keep working while the worker writes results. (No-op in memory.)
-            cur.execute("PRAGMA journal_mode=WAL")
+            _enable_wal(cur, sqlite_busy_timeout_ms / 1000)
             # Safe with WAL; only the last transactions can be lost on power failure.
             cur.execute("PRAGMA synchronous=NORMAL")
-            # SQLite allows one writer at a time. Instead of failing immediately with
-            # "database is locked", wait this long for the other writer to finish.
-            cur.execute(f"PRAGMA busy_timeout={int(sqlite_busy_timeout_ms)}")
             cur.close()
 
     return engine
+
+
+def _enable_wal(cursor, budget_seconds: float) -> str:  # type: ignore[no-untyped-def]
+    """Switch to WAL mode, retrying while another connection holds the lock.
+
+    When several connections open a brand-new database at once, `PRAGMA journal_mode=WAL`
+    can fail with "database is locked" straight away: SQLite does not apply busy_timeout
+    to the journal-mode switch. Without this retry, one of two engine processes starting
+    together on a fresh database could crash at startup. The mode persists in the file,
+    so once any connection has switched it, later calls return immediately.
+    """
+    deadline = time.monotonic() + max(budget_seconds, 0.1)
+    delay = 0.005
+    while True:
+        try:
+            return cursor.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or time.monotonic() >= deadline:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.1)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

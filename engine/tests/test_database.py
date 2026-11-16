@@ -229,3 +229,37 @@ def test_app_startup_runs_migrations(tmp_path, new_engine):
         pass
     assert _versions(new_engine(f"sqlite:///{tmp_path / 'test.db'}")) == [1, 2, 3]
 
+
+
+def _open_fresh_database_concurrently(tmp_path, races: int, connections: int = 4) -> list[BaseException]:  # type: ignore[no-untyped-def]
+    errors: list[BaseException] = []
+    for i in range(races):
+        url = f"sqlite:///{tmp_path / f'fresh-{i}.db'}"
+        barrier = threading.Barrier(connections)
+
+        def connect() -> None:
+            engine = make_engine(url)
+            barrier.wait()
+            try:
+                with engine.connect() as conn:
+                    assert conn.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
+            except BaseException as e:  # surfaced by the caller's assert
+                errors.append(e)
+            finally:
+                engine.dispose()
+
+        threads = [threading.Thread(target=connect) for _ in range(connections)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    return errors
+
+
+def test_simultaneous_first_connections_all_get_wal(tmp_path):
+    """Regression: `PRAGMA journal_mode=WAL` fails with "database is locked" when several
+    connections open a brand-new database at once (SQLite skips busy_timeout for the
+    journal-mode switch). This made test_concurrent_startups_apply_migrations_once fail
+    intermittently, and could crash one of two engine processes starting together."""
+    # 150 races detected the bug in 10/10 runs with the retry removed (40 races: only 4/10).
+    assert _open_fresh_database_concurrently(tmp_path, races=150) == []
