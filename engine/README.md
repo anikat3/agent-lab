@@ -3,11 +3,11 @@
 The Python service the AgentLab app calls to run evaluation suites. It implements the REST
 contract in [`../docs/api-contract.md`](../docs/api-contract.md).
 
-**Status: Milestone 2B.** Runs are executed for real. A background worker claims each
+**Status: Milestone 2C.** Runs are executed for real. A background worker claims each
 run, sends every scenario through a LangGraph workflow that calls the agent's OpenAI
-model via LangChain, evaluates the reply with deterministic keyword rules, and stores
-the result. Only `keyword` evaluation is supported so far. `exact`, `json_schema` and
-`llm_judge` scenarios are rejected at launch.
+model via LangChain, evaluates the reply with a deterministic evaluator, and stores the
+result. Supported eval types are `keyword`, `exact` and `json_schema`, and one run may
+mix them. `llm_judge` (Milestone 2D) is rejected at launch.
 
 ## Run locally
 
@@ -79,12 +79,18 @@ call_agent  [system_prompt] + scenario messages (order and roles kept) -> ChatOp
 evaluate    EVALUATORS[eval_type](response, eval_config) -> state.evaluation
 ```
 
-- **Keyword rules** (`app/evaluators.py`, pure function):
-  - Every `required` keyword must appear, and no `forbidden` keyword may.
-  - Matching is substring containment, case-insensitive unless `case_sensitive: true`.
-  - The score is 1.0 for a pass and 0.0 for a fail.
-  - Failures are categorised `keyword_missing` or `forbidden_content`; forbidden wins
-    when both apply, and both are explained.
+- **Evaluators** (`app/evaluators.py`): pure functions, no LLM, binary score (1.0 / 0.0).
+  `EVALUATORS[eval_type]` picks one per scenario.
+
+  | eval_type | Passes when | Failure categories |
+  |---|---|---|
+  | `keyword` | Every `required` keyword appears and no `forbidden` keyword does (substring match, case-insensitive unless `case_sensitive`) | `keyword_missing`, `forbidden_content` (wins when both apply) |
+  | `exact` | The response equals `expected` (Unicode NFC always; case-insensitive unless `case_sensitive`; whitespace significant unless `normalize_whitespace`, which collapses runs and trims; punctuation always counts) | `exact_mismatch` |
+  | `json_schema` | The response is strict JSON (no code fences, NaN or duplicate keys) that validates against `schema`, using the draft named by `$schema` (latest by default) | `invalid_json`, `schema_violation` |
+
+  Failure details say *where* a response failed (first differing position, JSON paths
+  and constraint names) without copying the response text, which is stored once as
+  `actual_response`.
 - **Agent mistakes vs infrastructure failures.** A wrong answer is a stored result
   (`passed: false`) and the run continues. A model or provider failure fails the run
   with a structured code, keeping earlier results; nothing is ever recorded as a fake
@@ -226,7 +232,7 @@ app/
   execution.py    executor interface: RunSpec, ScenarioOutcome, ExecutionError
   graph.py        LangGraph workflow + LangGraphExecutor + build_executor(settings)
   llm.py          model resolution, message construction, ChatOpenAI registry, error mapping
-  evaluators.py   deterministic evaluators (keyword)
+  evaluators.py   deterministic evaluators (keyword, exact, json_schema) + registry
   run_store.py    worker-side database operations (claim, lease, results, finish, recover)
   worker.py       background worker
 tests/            pytest suite (mocked models; test_live_openai.py is opt-in)

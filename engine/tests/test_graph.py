@@ -159,7 +159,7 @@ def test_unsupported_eval_type_fails_before_any_model_call():
 
 def test_capabilities():
     executor = LangGraphExecutor(FakeModels(FakeChatModel(lambda m: "x")), model_timeout_seconds=5)
-    assert executor.supported_eval_types == {"keyword"}
+    assert executor.supported_eval_types == {"keyword", "exact", "json_schema"}
     assert executor.supports_model("gpt-4o-mini")
     assert not executor.supports_model("claude-sonnet-4")
 

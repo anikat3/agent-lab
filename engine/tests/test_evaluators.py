@@ -102,5 +102,5 @@ def test_registry_entry_takes_raw_config(response, passed):
     assert EVALUATORS["keyword"](response, config).passed is passed
 
 
-def test_only_keyword_is_registered_in_this_milestone():
-    assert set(EVALUATORS) == {"keyword"}
+def test_registry_matches_milestone_2c():
+    assert set(EVALUATORS) == {"keyword", "exact", "json_schema"}  # llm_judge arrives in 2D
