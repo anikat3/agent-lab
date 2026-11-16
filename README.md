@@ -1,4 +1,4 @@
-# Convo Quality Compass
+# AgentLab
 
 Build a modern developer-focused SaaS application called AgentLab, an evaluation platform for conversational AI agents.
 
